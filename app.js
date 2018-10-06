@@ -30,18 +30,19 @@ app.set('views', path.join(__dirname, 'views'));
 
 // GET
 app.get('/', (req, res) => {
-    res.setHeader("Content-Security-Policy", "default-src 'self';");
+    res.setHeader("cache-control", "no-cache");
+    res.setHeader("Content-Security-Policy", "default-src 'self'; connect-src *");
     res.render('index', {STATICFILES: STATICFILES});
 });
 
 // WebSocket
 io.on('connection', (client) => {
-    console.log(`socket.io connected: ${client}`);
+    console.log(`websocket connected: ${client.conn.remoteAddress}`);
     client.on('event', (data) => {
-        console.log(`socket.io event: ${client}\n${data}`);
+        console.log(`websocket event: ${client.conn.remoteAddress}\n${data}`);
     });
     client.on('disconnect', () => {
-        console.log(`socket.io disconnected: ${client}`);
+        console.log(`websocket disconnected: ${client.conn.remoteAddress}`);
     });
 });
 
