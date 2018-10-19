@@ -4,6 +4,7 @@ let app = express();
 let http = require('http');
 let https = require('https');
 let socket_io = require('socket.io');
+let passport = require('passport'), PassportLocalStrategy = require('passport-local').Strategy;
 let path = require('path');
 let fs = require('fs');
 
@@ -11,11 +12,43 @@ let fs = require('fs');
 const HTTP_PORT = 80;
 const HTTPS_PORT = 443;
 const STATICFILES = '/static';
-const FILESYSTEM = (path.join(__dirname, process.argv.length > 2 ? process.argv[1] : 'files'));
+const FILESYSTEM = path.normalize(path.join(__dirname, process.argv.length > 2 ? process.argv[1] : 'files'));
 const HTTPS_OPTIONS = {
     key: fs.readFileSync(path.join(__dirname, 'cert', 'key.pem')),
     cert: fs.readFileSync(path.join(__dirname, 'cert', 'certificate.crt')),
 };
+
+// Functions
+function getFilesList(relpath, callback) {
+    const fullpath = path.normalize(path.join(FILESYSTEM, relpath));
+    if(fullpath.startsWith(FILESYSTEM)) {
+        fs.readdir(fullpath, callback);
+    } else {
+        callback(new Error('Invalid path argument'));
+    }
+}
+
+function getFile(relpath, callback) {
+    const fullpath = path.normalize(path.join(FILESYSTEM, relpath));
+    if(fullpath.startsWith(FILESYSTEM)) {
+        fs.open(fullpath, callback);
+    } else {
+        callback(new Error('Invalid path argument'));
+    }
+}
+
+// Passport setup
+passport.use(new PassportLocalStrategy(
+    (username, password, done) => {
+        if (username != "admin") {
+          return done(null, false, { message: 'Incorrect username' });
+        }
+        if (password != "1234") {
+          return done(null, false, { message: 'Incorrect password' });
+        }
+        return done(null, "admin");
+    }
+));
 
 // Servers
 let server = https.createServer(HTTPS_OPTIONS, app);
@@ -32,8 +65,16 @@ app.set('views', path.join(__dirname, 'views'));
 app.get('/', (req, res) => {
     res.setHeader("cache-control", "no-cache");
     res.setHeader("Content-Security-Policy", "default-src 'self'; connect-src *");
-    res.render('index', {STATICFILES: STATICFILES});
+    getFilesList("/", (err, files) => {
+        res.render('index', {STATICFILES: STATICFILES, ERROR: err, FILES: files});
+    });
 });
+
+// POST
+app.post('/login', passport.authenticate('local', { successRedirect: '/',
+                                                    failureRedirect: '/login',
+                                                    successFlash: 'Logged in',
+                                                    failureFlash: 'Invalid username or password' }));
 
 // WebSocket
 io.on('connection', (client) => {
