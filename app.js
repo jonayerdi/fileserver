@@ -19,18 +19,21 @@ const HTTPS_OPTIONS = {
 };
 
 // Functions
-function getFilesList(relpath, callback) {
+function canAccessPath(relpath) {
     const fullpath = path.normalize(path.join(FILESYSTEM, relpath));
-    if(fullpath.startsWith(FILESYSTEM)) {
+    return fullpath.startsWith(FILESYSTEM);
+}
+function getDirectory(relpath, callback) {
+    const fullpath = path.normalize(path.join(FILESYSTEM, relpath));
+    if(canAccessPath(fullpath)) {
         fs.readdir(fullpath, callback);
     } else {
         callback(new Error('Invalid path argument'));
     }
 }
-
 function getFile(relpath, callback) {
     const fullpath = path.normalize(path.join(FILESYSTEM, relpath));
-    if(fullpath.startsWith(FILESYSTEM)) {
+    if(canAccessPath(fullpath)) {
         fs.open(fullpath, callback);
     } else {
         callback(new Error('Invalid path argument'));
@@ -62,11 +65,19 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
 // GET
-app.get('/', (req, res) => {
+app.get('/*', (req, res) => {
     res.setHeader("cache-control", "no-cache");
     res.setHeader("Content-Security-Policy", "default-src 'self'; connect-src *");
-    getFilesList("/", (err, files) => {
-        res.render('index', {STATICFILES: STATICFILES, ERROR: err, FILES: files});
+    reqpath = req.url;
+    parentpath = path.join(reqpath, "..");
+    getDirectory(reqpath, (err, files) => {
+        res.render('index', {
+            STATICFILES: STATICFILES, 
+            PATH: reqpath, 
+            PARENT: canAccessPath(parentpath) ? parentpath : null, 
+            ERROR: err, 
+            FILES: files
+        });
     });
 });
 

@@ -8,6 +8,18 @@
         <script src="<%= STATICFILES %>/index.js"></script>
     </head>
     <body>
-
+        <h1><%= PATH %></h1>
+        <% if(PARENT) { %>
+        <a href="<%= PARENT %>">back</a>
+        <% } %>
+        <% if(ERROR) { %>
+        <h2><%= ERROR %></h2>
+        <% } else { %>
+        <ul>
+            <% FILES.forEach( FILE => { %>
+            <li><a href="<%= FILE %>"><%= FILE %></a></li>
+            <% }) %>
+        </ul>
+        <% } %>
     </body>
 </html>
