@@ -9,15 +9,15 @@
     </head>
     <body>
         <h1><%= PATH %></h1>
-        <% if(PARENT) { %>
-        <a href="<%= PARENT %>">back</a>
+        <% if(PARENTPATH) { %>
+        <a href="<%= PARENTPATH %>">back</a>
         <% } %>
         <% if(ERROR) { %>
         <h2><%= ERROR %></h2>
         <% } else { %>
         <ul>
-            <% FILES.forEach( FILE => { %>
-            <li><a href="<%= FILE %>"><%= FILE %></a></li>
+            <% RESULT.entries.forEach( ENTRY => { %>
+            <li><a href="<%= ENTRY.url %>"><%= ENTRY.name %></a></li>
             <% }) %>
         </ul>
         <% } %>

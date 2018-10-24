@@ -1,12 +1,13 @@
 // Imports
-let express = require('express');
-let app = express();
 let http = require('http');
 let https = require('https');
-let socket_io = require('socket.io');
-let passport = require('passport'), PassportLocalStrategy = require('passport-local').Strategy;
 let path = require('path');
 let fs = require('fs');
+let express = require('express');
+let app = express();
+let mime = require('mime');
+let socket_io = require('socket.io');
+let passport = require('passport'), PassportLocalStrategy = require('passport-local').Strategy;
 
 // Constants
 const HTTP_PORT = 80;
@@ -19,24 +20,64 @@ const HTTPS_OPTIONS = {
 };
 
 // Functions
+function fullpath2relpath(fullpath) {
+    return path.relative(FILESYSTEM, fullpath);
+}
+function relpath2fullpath(relpath) {
+    return path.normalize(path.join(FILESYSTEM, relpath));
+}
+function url2relpath(url) {
+    return path.join.apply(null, url.split("/"));
+}
+function relpath2url(relpath) {
+    return relpath.split(path.sep).join("/");
+}
 function canAccessPath(relpath) {
     const fullpath = path.normalize(path.join(FILESYSTEM, relpath));
     return fullpath.startsWith(FILESYSTEM);
 }
-function getDirectory(relpath, callback) {
-    const fullpath = path.normalize(path.join(FILESYSTEM, relpath));
+function getFromFilesystem(relpath, callback) {
+    const fullpath = relpath2fullpath(relpath);
     if(canAccessPath(fullpath)) {
-        fs.readdir(fullpath, callback);
+        fs.stat(fullpath, (err, stats) => {
+            if(err) {
+                callback(new Error(`Cannot stat ${relpath}`));
+            } else {
+                if(stats.isDirectory()) {
+                    fs.readdir(fullpath, {withFileTypes: true}, (err, dirents) => {
+                        if(err) {
+                            callback(err);
+                        } else {
+                            let entries = []
+                            dirents.forEach((dirent) => {
+                                let filerelpath = path.join(relpath, dirent.name);
+                                if(dirent.isDirectory()) {
+                                    entries.push({type: "directory", url: relpath2url(filerelpath), relpath: filerelpath, name: dirent.name});
+                                } else if(dirent.isFile()) {
+                                    entries.push({type: "file", url: relpath2url(filerelpath), relpath: filerelpath, name: dirent.name});
+                                }
+                            });
+                            callback(null, {
+                                type: "directory", 
+                                relpath: relpath,
+                                entries: entries
+                            });
+                        }
+                    });
+                } else if(stats.isFile()) {
+                    callback(null, {
+                        type: "file",
+                        relpath: relpath,
+                        fullpath: fullpath,
+                        stat: stats
+                    });
+                } else {
+                    callback(new Error('Invalid path argument: Not a file or directory'));
+                }
+            }
+        });
     } else {
-        callback(new Error('Invalid path argument'));
-    }
-}
-function getFile(relpath, callback) {
-    const fullpath = path.normalize(path.join(FILESYSTEM, relpath));
-    if(canAccessPath(fullpath)) {
-        fs.open(fullpath, callback);
-    } else {
-        callback(new Error('Invalid path argument'));
+        callback(new Error('Invalid path argument: Permission denied'));
     }
 }
 
@@ -68,16 +109,25 @@ app.set('views', path.join(__dirname, 'views'));
 app.get('/*', (req, res) => {
     res.setHeader("cache-control", "no-cache");
     res.setHeader("Content-Security-Policy", "default-src 'self'; connect-src *");
-    reqpath = req.url;
+    reqpath = url2relpath(req.url);
     parentpath = path.join(reqpath, "..");
-    getDirectory(reqpath, (err, files) => {
-        res.render('index', {
-            STATICFILES: STATICFILES, 
-            PATH: reqpath, 
-            PARENT: canAccessPath(parentpath) ? parentpath : null, 
-            ERROR: err, 
-            FILES: files
-        });
+    getFromFilesystem(reqpath, (err, result) => {
+        if(result.type == "file") {
+            res.writeHead(200, {
+                'Content-Type': mime.getType(path.extname(result.fullpath)),
+                'Content-Length': result.stat.size
+            });
+            let readStream = fs.createReadStream(result.fullpath);
+            readStream.pipe(res);
+        } else {
+            res.render('index', {
+                STATICFILES: STATICFILES, 
+                PATH: reqpath, 
+                PARENTPATH: canAccessPath(parentpath) ? parentpath : null, 
+                ERROR: err, 
+                RESULT: result
+            });
+        }
     });
 });
 
